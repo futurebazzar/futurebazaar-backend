@@ -1,3 +1,7 @@
 python manage.py runserver - to start server
 django-admin startproject project_name
 python manage.py startapp app_name
+python manage.py makemigrations - start makemigrations
+python manage.py migrate - apply migration
+python manage.py createsuperuser
+
