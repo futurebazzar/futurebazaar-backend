@@ -1,7 +1,40 @@
 from django.contrib.auth.models import AbstractUser
 from django.db import models
 
+
+from django.contrib.auth.models import BaseUserManager
+
+class CustomUserManager(BaseUserManager):
+    def create_user(self, email, password=None, **extra_fields):
+        """
+        Creates and returns a user with an email and password.
+        """
+        if not email:
+            raise ValueError('The Email field must be set')
+        email = self.normalize_email(email)
+        user = self.model(email=email, **extra_fields)
+        user.set_password(password)
+        user.save(using=self._db)
+        return user
+
+    def create_superuser(self, email, password=None, **extra_fields):
+        """
+        Creates and returns a superuser with an email and password.
+        """
+        extra_fields.setdefault('is_staff', True)
+        extra_fields.setdefault('is_superuser', True)
+
+        if extra_fields.get('is_staff') is not True:
+            raise ValueError('Superuser must have is_staff=True.')
+        if extra_fields.get('is_superuser') is not True:
+            raise ValueError('Superuser must have is_superuser=True.')
+
+        return self.create_user(email, password, **extra_fields)
+
+
 class UserModel(AbstractUser):
+    class Meta:
+        db_table = 'user'
     USER_TYPES = [
         ('admin', 'Admin'),
         ('seller', 'Seller'),
@@ -12,7 +45,7 @@ class UserModel(AbstractUser):
     first_name = models.CharField(max_length=50, blank=False)
     last_name = models.CharField(max_length=50, blank=False)
     email = models.EmailField(unique=True, blank=False)
-    contact_number = models.CharField(max_length=15, blank=False)
+    contact_number = models.CharField(unique=True, max_length=15, blank=False)
     password = models.CharField(max_length=50, blank=False)
     is_active = models.BooleanField(default=True)
     profile_photo = models.BinaryField(null=True, blank=True)
@@ -37,11 +70,17 @@ class UserModel(AbstractUser):
     USERNAME_FIELD = 'email'  # Email is now the unique identifier for authentication
     REQUIRED_FIELDS = ['first_name', 'last_name', 'contact_number']
 
+        # Set the custom manager
+    objects = CustomUserManager()
+
+
     def __str__(self):
         return f"{self.email} ({self.get_user_type_display()})"
 
     
 class Seller(models.Model):
+    class Meta:
+        db_table = 'seller'
     CATEGORY = [
         ('electronic', 'electronic'),
         ('furniture', 'furniture'),
@@ -66,7 +105,7 @@ class Seller(models.Model):
     gst_number = models.CharField(max_length=50, blank=True)
     is_active = models.BooleanField(default=True)
     created_at = models.DateTimeField(auto_now_add=True)
-    upadated_date = models.DateTimeField(auto_now_add=True)    
+    updated_date = models.DateTimeField(auto_now_add=True)    
     
 
     def __str__(self):

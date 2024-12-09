@@ -4,6 +4,8 @@ from user.models import Seller
 
 
 class Category(models.Model):
+    class Meta:
+        db_table = 'category'
     category_id = models.AutoField(primary_key=True)
     seller = models.ForeignKey(Seller, on_delete=models.CASCADE, related_name='custom_categories')
     name = models.CharField(max_length=255)
@@ -22,6 +24,8 @@ class Category(models.Model):
 
 
 class Product(models.Model):
+    class Meta:
+        db_table = 'product'
     product_id = models.AutoField(primary_key=True)
     # Linking product to seller
     seller_id = models.ForeignKey(Seller, on_delete=models.CASCADE, related_name='products')
@@ -49,6 +53,8 @@ class Product(models.Model):
         return f"{self.name} ({self.seller_category or self.default_category})"
     
 class ProductImage(models.Model):
+    class Meta:
+        db_table = 'product_image'
     product = models.ForeignKey(Product, related_name='images', on_delete=models.CASCADE)
     image = models.BinaryField()  # Storing the image as binary data
     created_at = models.DateTimeField(auto_now_add=True)
@@ -57,6 +63,8 @@ class ProductImage(models.Model):
         return f"Image for {self.product.name}"   
 
 class HeroSection(models.Model):
+    class Meta:
+        db_table = 'hero_section'
     hero_id = models.AutoField(primary_key=True)
     name = models.CharField(max_length=100,blank=True)
     section_name = models.CharField(max_length=100, blank=True)
