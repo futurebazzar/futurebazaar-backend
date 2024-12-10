@@ -40,6 +40,7 @@ INSTALLED_APPS = [
     'django.contrib.staticfiles',
     'rest_framework',
     'rest_framework.authtoken',
+    'rest_framework_simplejwt.token_blacklist',
     'drf_yasg',
     'user',
     'product'
@@ -49,6 +50,9 @@ REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': [
         'rest_framework_simplejwt.authentication.JWTAuthentication',
     ],
+    'DEFAULT_AUTHENTICATION_CLASSES': (
+        'user.models.CustomJWTAuthentication',
+    ),
 
 }
 
@@ -66,12 +70,14 @@ AUTH_USER_MODEL = "user.UserModel"
 SIMPLE_JWT = {
     'ACCESS_TOKEN_LIFETIME': timedelta(minutes=15),
     'REFRESH_TOKEN_LIFETIME': timedelta(days=1),
+    'AUTH_TOKEN_CLASSES': ('rest_framework_simplejwt.tokens.AccessToken',),
     'ROTATE_REFRESH_TOKENS': False,
     'BLACKLIST_AFTER_ROTATION': True,
     'ALGORITHM': 'HS256',
     'SIGNING_KEY': SECRET_KEY,
     'USER_ID_FIELD': 'user_id',  # Set the primary key field for your user model
     'USER_ID_CLAIM': 'user_id',
+
 }
 
 PASSWORD_HASHERS = [

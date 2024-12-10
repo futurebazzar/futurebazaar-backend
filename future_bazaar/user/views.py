@@ -12,13 +12,14 @@ from rest_framework import status
 from rest_framework.request import Request
 from rest_framework.exceptions import ValidationError, AuthenticationFailed, NotFound, PermissionDenied
 from rest_framework.permissions import AllowAny, IsAuthenticated
+from rest_framework_simplejwt.tokens import RefreshToken
 
 # DRF Extensions
 from drf_yasg.utils import swagger_auto_schema
 
 # Local Modules
-from .models import UserModel
-from .serializers import UserSignupSerializer, UserLoginRequestSerializer, UserUpdateSerializer
+from .models import UserModel, BlacklistedAccessToken
+from .serializers import UserSignupSerializer, UserLoginRequestSerializer, UserUpdateSerializer, LogoutSerializer
 from .utils.user_utils import user_sign_up, authenticate_user, deactivate_account
 
 # Set up logging for exception handling
@@ -171,3 +172,40 @@ def deactivate_user(request) -> Response:
         return Response({
             "message": "Your account has been deactivated successfully."
         }, status=status.HTTP_200_OK)
+    
+
+@swagger_auto_schema(
+    method='post',
+    request_body=LogoutSerializer,
+    responses={
+        200: "Logout successful",
+        400: "Invalid request",
+        500: "Server error",
+    },
+)
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def logout_user(request) -> Response:
+    """
+    Blacklists the refresh token and access token.
+    """
+    try:
+        refresh_token = request.data.get('refresh_token')
+        access_token = request.headers.get('Authorization', '')
+
+        if not refresh_token:
+            return Response({'error': 'Refresh token is required.'},
+                            status=status.HTTP_400_BAD_REQUEST)
+
+        # Blacklist refresh token
+        token = RefreshToken(refresh_token)
+        token.blacklist()
+
+        # Blacklist access token
+        BlacklistedAccessToken.objects.create(token=access_token)
+
+        return Response({'message': 'Logout successful'}, status=status.HTTP_200_OK)
+    except Exception as e:
+        return Response({'error': 'Invalid or expired token.', 'details': str(e)},
+                        status=status.HTTP_400_BAD_REQUEST)
+    

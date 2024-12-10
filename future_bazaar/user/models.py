@@ -1,8 +1,36 @@
 from django.contrib.auth.models import AbstractUser
 from django.db import models
-
-
+from rest_framework.exceptions import AuthenticationFailed
 from django.contrib.auth.models import BaseUserManager
+from rest_framework_simplejwt.authentication import JWTAuthentication
+from django.utils.timezone import now
+from typing import Optional, Tuple
+
+
+class BlacklistedAccessToken(models.Model):
+    token = models.CharField(max_length=500, unique=True)
+    blacklisted_at = models.DateTimeField(default=now)
+
+    def __str__(self):
+        return self.token
+    
+
+class CustomJWTAuthentication(JWTAuthentication):
+    def authenticate(self, request) -> Optional[Tuple[object, None]]:
+        header = self.get_header(request)
+
+        # Handle missing Authorization header
+        if header is None:
+            return None
+
+        # Extract the raw token
+        raw_token = self.get_raw_token(header)
+
+        if raw_token is None:
+            raise AuthenticationFailed("Invalid or missing token.")
+
+        validated_token = self.get_validated_token(raw_token)
+        return self.get_user(validated_token), None
 
 class CustomUserManager(BaseUserManager):
     def create_user(self, email, password=None, **extra_fields):

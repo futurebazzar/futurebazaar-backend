@@ -49,6 +49,9 @@ class UserSignupSerializer(serializers.ModelSerializer):
 class UserLoginRequestSerializer(serializers.Serializer):
     identifier = serializers.CharField(required=True, help_text="The username or email of the user.")
     password = serializers.CharField(required=True, write_only=True, help_text="The password of the user.")
+
+class LogoutSerializer(serializers.Serializer):
+    refresh_token = serializers.CharField(required=True, help_text="refresh token of the user")
     
     
 class UserUpdateSerializer(serializers.ModelSerializer):
