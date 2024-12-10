@@ -63,7 +63,8 @@ class UserUpdateSerializer(serializers.ModelSerializer):
         if value:
             return make_password(value)
         return value
-
+    
+   
     def update(self, instance, validated_data):
         """Update user details, including password and email."""
         password = validated_data.pop('password', None)

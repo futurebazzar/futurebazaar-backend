@@ -81,3 +81,16 @@ def authenticate_user(identifier: str, password: str) -> dict:
         "last_name": user.last_name,
         "user_type": user.user_type,
     }
+
+
+
+def deactivate_account(user: UserModel) -> None:
+    """
+    Helper function to deactivate a user's account.
+    Args:
+        user (UserModel): The user whose account needs to be deactivated.
+    """
+    if not user.is_active:
+        raise ValidationError("User account is already deactivated.")
+    user.is_active = False
+    user.save()

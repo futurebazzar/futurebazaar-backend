@@ -3,13 +3,14 @@ import logging
 
 # Django Modules
 from django.db import IntegrityError
+from typing import Union
 
 # DRF Modules
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.response import Response
 from rest_framework import status
 from rest_framework.request import Request
-from rest_framework.exceptions import ValidationError, AuthenticationFailed
+from rest_framework.exceptions import ValidationError, AuthenticationFailed, NotFound, PermissionDenied
 from rest_framework.permissions import AllowAny, IsAuthenticated
 
 # DRF Extensions
@@ -18,7 +19,7 @@ from drf_yasg.utils import swagger_auto_schema
 # Local Modules
 from .models import UserModel
 from .serializers import UserSignupSerializer, UserLoginRequestSerializer, UserUpdateSerializer
-from .utils.user_utils import user_sign_up, authenticate_user
+from .utils.user_utils import user_sign_up, authenticate_user, deactivate_account
 
 # Set up logging for exception handling
 logger = logging.getLogger(__name__)
@@ -125,3 +126,48 @@ def update_user(request: Request) -> Response:
             }
         }, status=status.HTTP_200_OK)
     return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+
+@swagger_auto_schema(
+    method='patch',
+    responses={
+        200: "Account deactivated successfully",
+        400: "Bad Request",
+        404: "User not found",
+        403: "Forbidden",
+    }
+)
+@api_view(['PATCH'])
+@permission_classes([IsAuthenticated])
+def deactivate_user(request) -> Response:
+    """
+    Deactivates the user account. Only the authenticated user can deactivate their own account.
+    Admins can deactivate any user account.
+    """
+    user: UserModel = request.user  # Get the authenticated user
+
+    if user.user_type == "admin":  # Admin can deactivate any user
+        user_id: Union[int, None] = request.data.get('user_id')
+        if not user_id:
+            raise ValidationError("User ID is required to deactivate another user's account.")
+        try:
+            target_user: UserModel = UserModel.objects.get(user_id=user_id)
+        except UserModel.DoesNotExist:
+            raise NotFound("User not found.")
+
+        if target_user.user_type == "admin":
+            raise PermissionDenied("Admin accounts cannot be deactivated by other admins.")
+        
+        deactivate_account(target_user)
+
+        return Response({
+            "message": f"User with ID {user_id} has been deactivated successfully."
+        }, status=status.HTTP_200_OK)
+    
+    else:
+        # Non-admin users can deactivate only their own accounts
+        deactivate_account(user)
+
+        return Response({
+            "message": "Your account has been deactivated successfully."
+        }, status=status.HTTP_200_OK)
