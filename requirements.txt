@@ -2,3 +2,5 @@ django == 4.2.17
 djangorestframework
 drf-yasg
 djangorestframework-simplejwt
+django-ipware
+geopy
