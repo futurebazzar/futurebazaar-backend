@@ -1,14 +1,24 @@
 from rest_framework import serializers
+import base64
 from .models import Category, Seller
 
 class CategorySerializer(serializers.ModelSerializer):
+    image = serializers.ImageField(write_only=True)
+    image_base64 = serializers.SerializerMethodField() 
     class Meta:
         model = Category
-        fields = ['category_id', 'name', 'description', 'image', 'parent_category', 'is_active']
+        fields = ['category_id', 'name', 'description', 'image', 'image_base64', 'parent_category', 'is_active']
+
+    def get_image_base64(self, obj):
+        if obj.image:
+            # Convert binary data to base64
+            encoded_image = base64.b64encode(obj.image).decode('utf-8')
+            return f"data:image/jpeg;base64,{encoded_image}"  # You can modify the mime type (jpeg/png) accordingly
+        return None
+    
 
     def create(self, validated_data):
         user = self.context['request'].user
-
         # Get the seller profile from the user
         try:
             seller = Seller.objects.get(user_id=user.user_id)

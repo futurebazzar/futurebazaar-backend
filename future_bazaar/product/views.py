@@ -1,6 +1,6 @@
 from rest_framework.exceptions import PermissionDenied, ValidationError,NotFound
 from rest_framework.views import exception_handler
-from rest_framework.decorators import api_view, permission_classes
+from rest_framework.decorators import api_view, permission_classes, parser_classes
 from rest_framework.response import Response
 from rest_framework import status
 from .models import Category, Seller
@@ -8,8 +8,11 @@ from .serializers import CategorySerializer
 from rest_framework.permissions import IsAuthenticated
 from user.models import UserModel   
 from .decorators import restrict_user_type
+from .utils.product_utils import (create_category_helper,get_category_helper,update_category_helper,delete_category_helper)
 import logging
-
+from drf_yasg import openapi 
+from django.core.exceptions import ObjectDoesNotExist
+from rest_framework.parsers import MultiPartParser, FormParser
 # DRF Extensions
 from drf_yasg.utils import swagger_auto_schema
 
@@ -25,38 +28,18 @@ logger = logging.getLogger(__name__)
         500: "Internal Server Error",
     }
 )
+ # Only 'Seller' users can access this view
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
-@restrict_user_type('Seller')  # Only 'Seller' users can access this view
+@restrict_user_type('Seller')
+@parser_classes([MultiPartParser, FormParser])
 def create_category(request):
-    """
-    API to create a new category. Only users with Seller profiles can create categories.
-    """
-
     try:
-        user = request.user
-
-        # Serialize and validate the data
-        serializer = CategorySerializer(data=request.data, context={'request': request})
-        serializer.is_valid(raise_exception=True)  # Automatically raises ValidationError for invalid data
-
-        # Check if a category with the same name already exists for this seller
-        category_name = serializer.validated_data.get('name')
-        #seller = user.seller_profile  # Get the seller profile directly from the user object
-        #print(seller)
-
-        # Check for existing category with the same name
-        existing_category = Category.objects.filter( name=category_name).first()
-        if existing_category:
-            raise ValidationError(f"A category with the name '{category_name}' already exists for this seller.")
-
-        # Save the validated category and associate it with the seller
-        serializer.save()
-
-        # Return a success response with the category data
+       
+        category = create_category_helper(request)
         return Response({
             "message": "Category created successfully",
-            "data": serializer.data,
+            "data": CategorySerializer(category).data,
         }, status=status.HTTP_201_CREATED)
 
     except ValidationError as ve:
@@ -73,36 +56,29 @@ def create_category(request):
                         status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
-
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
-def get_category(request, category_id: int) -> Response:
-    """
-    API to fetch a single category by ID.
-    Only users with Seller profiles can access this API.
-    """
-    user: UserModel = request.user
-
-    # Check if the user is a Seller
-    if not hasattr(user, 'seller_profile'):
-        logger.warning(f"Unauthorized access attempt by user ID {user.user_id}")
-        raise PermissionDenied("Only users with Seller profiles can access categories.")
-
-    seller = user.seller_profile  # Access the Seller profile of the user
-
+def get_category(request, category_id: int):
     try:
-        # Fetch the category associated with the logged-in seller
-        category: Category = Category.objects.get(category_id=category_id, seller=seller)
-    except Category.DoesNotExist:
-        logger.error(f"Category with ID {category_id} not found for Seller ID {seller.seller_id}")
-        raise NotFound(f"Category with ID {category_id} does not exist.")
+        category = get_category_helper(request.user, category_id)
+        return Response({
+            "message": "Category fetched successfully.",
+            "data": CategorySerializer(category).data,
+        }, status=status.HTTP_200_OK)
 
-    # Serialize and return the category
-    serializer = CategorySerializer(category)
-    return Response({
-        "message": "Category fetched successfully.",
-        "data": serializer.data
-    }, status=status.HTTP_200_OK)
+    except PermissionDenied as pd:
+        logger.warning(f"Permission denied: {pd}")
+        return Response({"error": str(pd)}, status=status.HTTP_403_FORBIDDEN)
+
+    except NotFound as nf:
+        logger.error(f"Not found: {nf}")
+        return Response({"error": str(nf)}, status=status.HTTP_404_NOT_FOUND)
+
+    except Exception as e:
+        logger.error(f"Unexpected error: {e}")
+        return Response({"error": "An unexpected error occurred. Please try again later."},
+                        status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
 
 @swagger_auto_schema(
     method='put',
@@ -119,31 +95,12 @@ def get_category(request, category_id: int) -> Response:
 @permission_classes([IsAuthenticated])
 @restrict_user_type('Seller') 
 def update_category(request, category_id):
-    """
-    API to update an existing category. Only users with Seller profiles can update categories.
-    """
     try:
-        user = request.user
-       
-        seller = Seller.objects.get(user_id=user.user_id)
-       
-        # Get the category instance
-        try:
-            category = Category.objects.get(pk=category_id, seller=seller.seller_profile)
-        except Category.DoesNotExist:
-            logger.error(f"Category ID {category_id} not found or not owned by user ID {user.id}")
-            raise NotFound("Category not found or not owned by the current seller.")
-
-        # Serialize and validate the data
-        serializer = CategorySerializer(category, data=request.data, partial=True, context={'request': request})
-        serializer.is_valid(raise_exception=True)
-
-        # Save the updated category
-        serializer.save()
-
+        print(request.user)
+        category = update_category_helper(request, category_id)
         return Response({
             "message": "Category updated successfully",
-            "data": serializer.data,
+            "data": CategorySerializer(category).data,
         }, status=status.HTTP_200_OK)
 
     except ValidationError as ve:
@@ -154,11 +111,14 @@ def update_category(request, category_id):
         logger.warning(f"Permission denied: {pd}")
         return Response({"error": str(pd)}, status=status.HTTP_403_FORBIDDEN)
 
+    except NotFound as nf:
+        logger.error(f"Not found: {nf}")
+        return Response({"error": str(nf)}, status=status.HTTP_404_NOT_FOUND)
+
     except Exception as e:
         logger.error(f"Unexpected error: {e}")
         return Response({"error": "An unexpected error occurred. Please try again later."},
                         status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-
 @swagger_auto_schema(
     method='delete',
     responses={
@@ -173,21 +133,8 @@ def update_category(request, category_id):
 @permission_classes([IsAuthenticated])
 @restrict_user_type('Seller') 
 def delete_category(request, category_id):
-    """
-    API to delete an existing category. Only users with Seller profiles can delete categories.
-    """
     try:
-        user = request.user
-        # Get the category instance
-        try:
-            category = Category.objects.get(pk=category_id, seller=user.seller_profile)
-        except Category.DoesNotExist:
-            logger.error(f"Category ID {category_id} not found or not owned by user ID {user.id}")
-            raise NotFound("Category not found or not owned by the current seller.")
-
-        # Delete the category
-        category.delete()
-
+        delete_category_helper(request.user, category_id)
         return Response({
             "message": "Category deleted successfully",
         }, status=status.HTTP_200_OK)
@@ -204,3 +151,92 @@ def delete_category(request, category_id):
         logger.error(f"Unexpected error: {e}")
         return Response({"error": "An unexpected error occurred. Please try again later."},
                         status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+@swagger_auto_schema(
+    method='get',
+    operation_summary="Get seller's categories with subcategories",
+    operation_description=(
+        "Retrieve all parent categories for the authenticated seller along with their child categories."
+    ),
+    responses={
+        200: openapi.Response(
+            description="Categories retrieved successfully",
+            examples={
+                "application/json": [
+                    {
+                        "category_id": 1,
+                        "name": "Bedroom",
+                        "description": "Furniture for bedrooms.",
+                        "image": "binary_data",
+                        "parent_category": None,
+                        "is_active": True,
+                        "subcategories": [
+                            {
+                                "category_id": 2,
+                                "name": "4x6 Bed",
+                                "description": "Small-sized bed.",
+                                "image": "binary_data",
+                                "parent_category": 1,
+                                "is_active": True
+                            },
+                            {
+                                "category_id": 3,
+                                "name": "6x6 Bed",
+                                "description": "Large-sized bed.",
+                                "image": "binary_data",
+                                "parent_category": 1,
+                                "is_active": True
+                            }
+                        ]
+                    }
+                ]
+            },
+        ),
+        403: "Forbidden: You do not have permission to access this resource.",
+        404: "Not Found: Seller profile does not exist for the user.",
+        500: "Internal Server Error: An unexpected error occurred.",
+    },
+)
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def get_categories_with_children(request):
+    try:
+        # Get the authenticated user
+        user = request.user
+        print(user.user_id)
+        # Retrieve the seller profile associated with the user
+        try:
+            seller = Seller.objects.get(user_id=request.user.user_id) 
+            print(seller)  
+        except ObjectDoesNotExist:
+            return Response(
+                {"error": "Seller profile does not exist for the user."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        # Fetch parent categories with parent_category as None or 0
+        parent_categories = Category.objects.filter(
+            seller_id=seller.seller_id,
+            parent_category__isnull=True
+        ) | Category.objects.filter(
+            seller=seller,
+            parent_category=0
+        )
+
+        # Structure the response to include subcategories for each parent
+        categories_with_children = []
+        for parent in parent_categories:
+            # Fetch subcategories for the current parent
+            subcategories = Category.objects.filter(parent_category=parent)
+            parent_data = CategorySerializer(parent).data
+            parent_data['subcategories'] = CategorySerializer(subcategories, many=True).data
+            categories_with_children.append(parent_data)
+
+        return Response(categories_with_children, status=status.HTTP_200_OK)
+
+    except Exception as e:
+        return Response(
+            {"error": "An unexpected error occurred.", "details": str(e)},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        )
