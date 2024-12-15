@@ -1,8 +1,8 @@
 from rest_framework import serializers
 from .models import UserModel, Seller
-from django.contrib.auth.hashers import make_password
+from rest_framework.pagination import PageNumberPagination
 
-class UserSignupSerializer(serializers.ModelSerializer):
+class UserSerializer(serializers.ModelSerializer):
     class Meta:
         model = UserModel
         fields = ['first_name', 'last_name', 'email',  'profile_photo','contact_number', 'password']
@@ -45,66 +45,6 @@ class UserSignupSerializer(serializers.ModelSerializer):
         user.save()
         return user
     
-
-class UserLoginRequestSerializer(serializers.Serializer):
-    identifier = serializers.CharField(required=True, help_text="The username or email of the user.")
-    password = serializers.CharField(required=True, write_only=True, help_text="The password of the user.")
-
-class LogoutSerializer(serializers.Serializer):
-    refresh_token = serializers.CharField(required=True, help_text="refresh token of the user")
-
-
-class UserUpdateSerializer(serializers.ModelSerializer):
-    password = serializers.CharField(write_only=True, required=False)
-
-    class Meta:
-        model = UserModel
-        fields = ['first_name', 'last_name', 'email', 'contact_number', 'password']
-
-    def validate_first_name(self, value: str) -> str:
-        """Validate first name."""
-        if not value.isalpha():
-            raise serializers.ValidationError("First name must contain only alphabetic characters.")
-        if len(value) > 50:
-            raise serializers.ValidationError("First name must not exceed 50 characters.")
-        return value
-
-    def validate_last_name(self, value: str) -> str:
-        """Validate last name."""
-        if not value.isalpha():
-            raise serializers.ValidationError("Last name must contain only alphabetic characters.")
-        if len(value) > 50:
-            raise serializers.ValidationError("Last name must not exceed 50 characters.")
-        return value
-
-    def validate_email(self, value: str) -> str:
-        """Validate email format and uniqueness."""
-        if UserModel.objects.filter(email=value).exists():
-            raise serializers.ValidationError("This email is already in use.")
-        return value
-
-    def validate_contact_number(self, value: str) -> str:
-        """Validate contact number."""
-        if not value.isdigit():
-            raise serializers.ValidationError("Contact number must contain only numeric characters.")
-        if len(value) < 10 or len(value) > 15:
-            raise serializers.ValidationError("Contact number must be between 10 and 15 digits.")
-        if UserModel.objects.filter(contact_number=value).exists():
-            raise serializers.ValidationError("This contact number is already in use.")
-        return value
-
-    def validate_password(self, value: str) -> str:
-        """Validate and hash the password."""
-        if value:
-            if len(value) < 8:
-                raise serializers.ValidationError("Password must be at least 8 characters long.")
-            if not any(char.isdigit() for char in value):
-                raise serializers.ValidationError("Password must contain at least one numeric digit.")
-            if not any(char.isalpha() for char in value):
-                raise serializers.ValidationError("Password must contain at least one alphabetic character.")
-            return make_password(value)
-        return value
-
     def update(self, instance: UserModel, validated_data: dict) -> UserModel:
         """Update user details, including password and email."""
         password = validated_data.pop('password', None)
@@ -114,6 +54,15 @@ class UserUpdateSerializer(serializers.ModelSerializer):
             instance.password = password  # Already hashed
         instance.save()
         return instance
+    
+
+class UserLoginRequestSerializer(serializers.Serializer):
+    identifier = serializers.CharField(required=True, help_text="The username or email of the user.")
+    password = serializers.CharField(required=True, write_only=True, help_text="The password of the user.")
+
+class LogoutSerializer(serializers.Serializer):
+    refresh_token = serializers.CharField(required=True, help_text="refresh token of the user")
+
 
 
 class SellerSerializer(serializers.ModelSerializer):
@@ -129,7 +78,8 @@ class SellerSerializer(serializers.ModelSerializer):
             "shop_timing_open",
             "shop_timing_close",
             "shop_location",
-            "geo_location",
+            "geo_location_lng",
+            "geo_location_lat",
             "shop_photo",
             "days_closed",
             "gst_number",
@@ -195,11 +145,23 @@ class SellerSerializer(serializers.ModelSerializer):
     #         )
     #     return data
     
-    def update(self, instance: Seller, validated_data: dict) -> Seller:
+    def create(self, validated_data: dict) -> Seller:
+        seller = Seller(**validated_data)
+        
+        seller.save()
+        return seller
+    
+    def update(self, instance: UserModel, validated_data: dict) -> UserModel:
+        """Update user details, including password and email."""
         for attr, value in validated_data.items():
-            setattr(instance, attr, value)
+            setattr(instance, attr, value) # Already hashed
         instance.save()
         return instance
+    
+class CustomPagination(PageNumberPagination):
+    page_size = 10  # Default number of items per page
+    page_size_query_param = "page_size"  # Allow client to control page size
+    max_page_size = 50  # Maximum allowed page size
 
     
 UserType = {

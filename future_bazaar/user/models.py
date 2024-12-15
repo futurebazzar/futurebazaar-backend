@@ -126,7 +126,8 @@ class Seller(models.Model):
     shop_timing_open = models.TimeField(blank=False)
     shop_timing_close = models.TimeField(blank=False)
     shop_location = models.TextField(blank=False)
-    geo_location = models.CharField(max_length=255)
+    geo_location_lat = models.FloatField(blank=True, null=True)  # Latitude
+    geo_location_lng = models.FloatField(blank=True, null=True)  # Longitude
     shop_photo = models.BinaryField(blank=False)
     is_approved = models.BooleanField(default=False)
     days_closed = models.CharField(max_length=255)

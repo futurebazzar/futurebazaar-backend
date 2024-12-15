@@ -1,10 +1,11 @@
 from rest_framework.exceptions import PermissionDenied, ValidationError,NotFound
 from rest_framework.views import exception_handler
 from rest_framework.decorators import api_view, permission_classes, parser_classes
+from rest_framework.decorators import api_view, permission_classes
 from rest_framework.response import Response
 from rest_framework import status
 from .models import Category, Seller
-from .serializers import CategorySerializer
+from .serializers import CategorySerializer, ProductSerializer
 from rest_framework.permissions import IsAuthenticated
 from user.models import UserModel   
 from .decorators import restrict_user_type
@@ -80,6 +81,7 @@ def get_category(request, category_id: int):
                         status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
+
 @swagger_auto_schema(
     method='put',
     request_body=CategorySerializer,
@@ -119,6 +121,8 @@ def update_category(request, category_id):
         logger.error(f"Unexpected error: {e}")
         return Response({"error": "An unexpected error occurred. Please try again later."},
                         status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
 @swagger_auto_schema(
     method='delete',
     responses={
@@ -128,7 +132,6 @@ def update_category(request, category_id):
         500: "Internal Server Error",
     }
 )
-
 @api_view(['DELETE'])
 @permission_classes([IsAuthenticated])
 @restrict_user_type('Seller') 
@@ -240,3 +243,51 @@ def get_categories_with_children(request):
             {"error": "An unexpected error occurred.", "details": str(e)},
             status=status.HTTP_500_INTERNAL_SERVER_ERROR,
         )
+    
+
+
+# Swagger auto schema for the request body and responses
+@swagger_auto_schema(
+    request_body=ProductSerializer,
+    method='post',
+    responses={
+        200: "Product Created successfully",
+        403: "Forbidden",
+        400: "Bad Request",
+        500: "Internal Server Error",
+    },
+)
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])  # Only authenticated users can access this API
+def create_product(request) -> Response:
+    """
+    API view to create a new product. Only sellers can create products.
+    """
+    try:
+        user = request.user
+
+        # Ensure that the authenticated user is a seller
+        if user.user_type != 'seller':
+            return Response({"detail": "Only sellers can create products."}, status=status.HTTP_403_FORBIDDEN)
+
+        # Prepare the data for the serializer (no need to include seller_id as it's automatically linked)
+        data = request.data.copy()
+
+        # Serialize the data
+        serializer = ProductSerializer(data=data, context={'request': request})
+
+        # Validate and create the product
+        if serializer.is_valid():
+            product = serializer.save()
+            return Response(serializer.data, status=status.HTTP_201_CREATED)
+
+        # Handle validation errors from the serializer
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+    except ValidationError as e:
+        # Handle validation errors specifically
+        return Response({"detail": f"Validation Error: {str(e)}"}, status=status.HTTP_400_BAD_REQUEST)
+
+    except Exception as e:
+        # General exception handling for unforeseen errors
+        return Response({"detail": f"An unexpected error occurred: {str(e)}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)

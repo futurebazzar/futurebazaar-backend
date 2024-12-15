@@ -1,12 +1,38 @@
 # apps/products/admin.py
 from django.contrib import admin
 from .models import Category, Product, ProductImage, HeroSection
+from django.contrib import admin
+from .models import Category
+from django import forms
 
-# Registering the Category model
+class CategoryAdminForm(forms.ModelForm):
+    # Add a field to upload files
+    image_upload = forms.FileField(required=False, label="Upload Image")
+
+    class Meta:
+        model = Category
+        fields = ['seller', 'name', 'description', 'parent_category', 'is_active', 'image_upload']
+
+    def save(self, commit=True):
+        # Override save method to handle BinaryField
+        instance = super().save(commit=False)
+        
+        # Handle file upload if provided
+        image_file = self.cleaned_data.get('image_upload')
+        if image_file:
+            instance.image = image_file.read()  # Convert file to binary data
+
+        if commit:
+            instance.save()
+
+        return instance
+
 class CategoryAdmin(admin.ModelAdmin):
-    list_display = ('name', 'seller', 'parent_category', 'is_active', 'created_at', 'updated_at')
-    list_filter = ('is_active', 'seller')
-    search_fields = ('name', 'seller__business_name')
+    form = CategoryAdminForm
+    list_display = ['name', 'seller', 'is_active', 'created_at']
+    list_filter = ['is_active', 'created_at']
+    search_fields = ['name']
+
 
 # Registering the Product model
 class ProductAdmin(admin.ModelAdmin):

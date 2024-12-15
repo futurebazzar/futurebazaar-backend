@@ -1,6 +1,7 @@
 from rest_framework import serializers
 import base64
 from .models import Category, Seller
+from .models import Category, Seller, Product
 
 class CategorySerializer(serializers.ModelSerializer):
     image = serializers.ImageField(write_only=True)
@@ -50,3 +51,44 @@ class CategorySerializer(serializers.ModelSerializer):
             setattr(instance, attr, value)
         instance.save()
         return instance
+    
+
+class ProductSerializer(serializers.ModelSerializer):
+    banner_image = serializers.FileField(required=False) 
+
+    class Meta:
+        model = Product
+        fields = [
+            'name', 'title', 'description', 
+            'price', 'discounted_price', 'stock_quantity', 'banner_image', 
+            'exclusives'
+        ]
+        read_only_fields = ['product_id', 'created_at', 'updated_at', 'category_id']  # These fields are read-only
+
+    def validate(self, attrs) :
+        """
+        Custom validation for the product.
+        """
+        user = self.context['request'].user
+        if user.user_type != 'seller':
+            raise serializers.ValidationError("Only sellers can create products.")
+        
+        # Automatically link the seller from the authenticated user
+        if 'seller_id' in attrs:
+            if attrs['seller_id'] != user.seller.id:
+                raise serializers.ValidationError("Seller ID does not match the authenticated user's seller.")
+
+        # Validate that the discounted price is not greater than the price
+        if attrs.get('discounted_price') and attrs['discounted_price'] > attrs['price']:
+            raise serializers.ValidationError("Discounted price cannot be higher than the price.")
+        
+        return attrs
+
+    def create(self, validated_data) -> Product:
+        """
+        Create and return a new product instance.
+        """
+        user = self.context['request'].user
+        validated_data['seller_id'] = user.seller  # Automatically link the seller from the authenticated user
+        validated_data['is_active'] = True  # Set is_active to True by default
+        return super().create(validated_data)
